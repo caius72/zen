@@ -17,6 +17,17 @@ const stable = (value: string) =>
 const identity = (el: Element) =>
   `${el.id} ${el.getAttribute("class") ?? ""} ${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("title") ?? ""} ${el.getAttribute("data-testid") ?? ""} ${el.getAttribute("data-component") ?? ""}`;
 
+// Google Publisher Tag slots (data-google-query-id, google_ads_iframe_* frames) rarely carry
+// ad-like names and their frame ids are unstable, so detect the slot wrapper directly.
+export function isGptSlot(el: Element): boolean {
+  return (
+    el.hasAttribute("data-google-query-id") ||
+    !!el.querySelector(
+      ':scope > iframe[id^="google_ads_iframe_"], :scope > div > iframe[id^="google_ads_iframe_"]',
+    )
+  );
+}
+
 export function isCookieNotice(el: Element): boolean {
   if (consentPrefixes.some((prefix) => el.id.startsWith(prefix))) return true;
   const name = identity(el);
@@ -90,7 +101,7 @@ export function collectCandidates(doc: Document): Candidate[] {
   // Consent UI often arrives at the very end of body, after thousands of nodes.
   const priority = [
     ...doc.querySelectorAll(
-      '[role="dialog"],[aria-modal="true"],[id^="sp_message_"],[id*="cookie" i],[id*="consent" i],#onetrust-banner-sdk,#didomi-host',
+      '[role="dialog"],[aria-modal="true"],[id^="sp_message_"],[id*="cookie" i],[id*="consent" i],#onetrust-banner-sdk,#didomi-host,[data-google-query-id]',
     ),
   ].slice(0, 100);
   const elements = [
@@ -104,10 +115,12 @@ export function collectCandidates(doc: Document): Candidate[] {
   for (const el of elements) {
     if (output.length >= 60) break;
     const cookie = isCookieNotice(el);
-    const signals = `${cookie ? "Cookie consent overlay. Hide visually only; do not accept or reject consent. " : ""}${identity(el)} ${el.getAttribute("role") ?? ""}`;
+    const gpt = isGptSlot(el);
+    const signals = `${cookie ? "Cookie consent overlay. Hide visually only; do not accept or reject consent. " : ""}${gpt ? "Google Publisher Tag advertisement slot. " : ""}${identity(el)} ${el.getAttribute("role") ?? ""}`;
     const position = doc.defaultView?.getComputedStyle(el).position ?? "static";
     if (
       !cookie &&
+      !gpt &&
       !clutter.test(signals) &&
       !el.matches('aside,[role="dialog"],iframe') &&
       !["fixed", "sticky"].includes(position)
@@ -143,8 +156,14 @@ function emptyAfterHiding(el: Element, hidden: Set<Element>, depth = 0): boolean
   )
     return false;
   // A background image or generated text may be useful even with no text nodes.
-  const computed = el.ownerDocument.defaultView?.getComputedStyle(el);
+  const view = el.ownerDocument.defaultView;
+  const computed = view?.getComputedStyle(el);
   if (computed?.backgroundImage && computed.backgroundImage !== "none") return false;
+  // Generated content (::before/::after) renders without DOM text nodes.
+  for (const pseudo of ["::before", "::after"]) {
+    const content = view?.getComputedStyle(el, pseudo).content ?? "none";
+    if (!/^(?:none|normal|""|'')?$/.test(content)) return false;
+  }
   for (const node of el.childNodes) {
     if (node.nodeType === 3 && !emptyLabel.test((node.textContent ?? "").trim())) return false;
     if (node.nodeType === 1 && !emptyAfterHiding(node as Element, hidden, depth + 1)) return false;

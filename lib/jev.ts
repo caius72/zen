@@ -4,6 +4,8 @@ import type { Provider } from "./providers";
 
 export const ENDPOINT = "https://ai-gateway.vercel.sh/v4/ai/evaluation-model";
 export const TYPESAFE_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
+export const OPENROUTER_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
+export const OPENROUTER_MODEL = "typesafe/jev-1.13";
 const answerSchema = z.object({
   type: z.literal("choice"),
   choice: z.enum(categories),
@@ -16,7 +18,8 @@ export function evaluationRequest(snapshot: Snapshot) {
   return {
     state: {
       pageType: snapshot.context.kind,
-      // No full URL, query parameters, page title, main article text or form values.
+      // No full URL, query parameters, page title, form values or long article paragraphs.
+      // Snippets are bounded and redacted but may contain short editorial text.
       elements: snapshot.candidates.map(({ id, tag, signals, text, position, count }) => ({
         id,
         tag,
@@ -49,7 +52,11 @@ export function evaluationRequest(snapshot: Snapshot) {
   };
 }
 
-export function rulesFromAnswers(raw: unknown, candidates: Candidate[]): Rule[] {
+export function rulesFromAnswers(
+  raw: unknown,
+  candidates: Candidate[],
+  provider: Provider = "vercel",
+): Rule[] {
   const response = responseSchema.parse(raw);
   if (
     Object.keys(response.answers).length !== candidates.length ||
@@ -64,6 +71,8 @@ export function rulesFromAnswers(raw: unknown, candidates: Candidate[]): Rule[] 
     // If supplied, probabilities must support the selected choice.
     if (answer.probabilities && (answer.probabilities[answer.choice] ?? 0) < 0.9) return [];
     if (answer.confidence !== undefined && answer.confidence < 0.9) return [];
+    // OpenRouter answers are expected to carry confidence; missing evidence keeps the element visible.
+    if (provider === "openrouter" && answer.confidence === undefined) return [];
     return [{ selector: candidate.selector, category: answer.choice, enabled: true }];
   });
 }
@@ -73,10 +82,15 @@ export function evaluationCall(
   key: string,
   provider: Provider = "vercel",
 ): { url: string; init: RequestInit } {
-  const direct = provider === "typesafe";
+  const direct = provider !== "vercel";
   const request = evaluationRequest(snapshot);
   return {
-    url: direct ? TYPESAFE_ENDPOINT : ENDPOINT,
+    url:
+      provider === "typesafe"
+        ? TYPESAFE_ENDPOINT
+        : provider === "openrouter"
+          ? OPENROUTER_ENDPOINT
+          : ENDPOINT,
     init: {
       method: "POST",
       headers: {
@@ -91,7 +105,13 @@ export function evaluationCall(
               "ai-model-id": "typesafe-ai/jev",
             }),
       },
-      body: JSON.stringify(direct ? { ...request, model: "jev-latest" } : request),
+      body: JSON.stringify(
+        provider === "typesafe"
+          ? { ...request, model: "jev-latest" }
+          : provider === "openrouter"
+            ? { ...request, model: OPENROUTER_MODEL }
+            : request,
+      ),
       signal: AbortSignal.timeout(25_000),
     },
   };
@@ -109,14 +129,18 @@ export async function evaluate(
     const advice =
       provider === "typesafe" && (response.status === 401 || response.status === 403)
         ? "Check your TypeSafe API key."
-        : response.status === 401
-          ? "Check your Gateway API key."
-          : response.status === 403
-            ? "Check Gateway credits and model access."
-            : response.status === 429
-              ? "Rate limited. Try again later."
-              : "Try again later.";
+        : provider === "openrouter" && (response.status === 401 || response.status === 403)
+          ? "Check your OpenRouter API key."
+          : provider === "openrouter" && response.status === 402
+            ? "Check your OpenRouter credits."
+            : response.status === 401
+              ? "Check your Gateway API key."
+              : response.status === 403
+                ? "Check Gateway credits and model access."
+                : response.status === 429
+                  ? "Rate limited. Try again later."
+                  : "Try again later.";
     throw new Error(`Jev request failed: HTTP ${response.status}. ${advice}`);
   }
-  return rulesFromAnswers(await response.json(), snapshot.candidates);
+  return rulesFromAnswers(await response.json(), snapshot.candidates, provider);
 }

@@ -1,7 +1,18 @@
 import { browser } from "wxt/browser";
 import { z } from "zod";
 import { evaluate } from "../lib/jev";
-import { providers, providerKeyLabel, resolveProvider } from "../lib/providers";
+import { providers, providerKeyLabel } from "../lib/providers";
+import {
+  attemptKey,
+  autoAttempted,
+  isExcluded,
+  readExcludedHosts,
+  readSettings,
+  removeKey,
+  saveKey,
+  suppressAuto,
+  writeExcludedHosts,
+} from "../lib/settings";
 import {
   contextSchema,
   POLICY_VERSION,
@@ -14,7 +25,6 @@ import {
   type PageState,
   type Profile,
   type Reply,
-  type Settings,
   type Snapshot,
 } from "../lib/model";
 
@@ -39,6 +49,10 @@ const uiMessage = z.discriminatedUnion("type", [
     enabled: z.boolean(),
   }),
   z.object({ type: z.literal("forget"), tabId: z.number().int() }),
+  z.object({
+    type: z.literal("excludedHosts"),
+    hosts: z.array(z.string().max(253)).max(500),
+  }),
 ]);
 const pageMessage = z.discriminatedUnion("type", [
   z.object({
@@ -60,15 +74,10 @@ export default defineBackground(() => {
   void browser.storage.local
     .setAccessLevel?.({ accessLevel: "TRUSTED_CONTEXTS" })
     .catch(() => undefined);
-  const settings = async (): Promise<Settings> => {
-    const data = await browser.storage.local.get(["enabled", "apiKey", "mode", "provider"]);
-    return {
-      enabled: data.enabled !== false,
-      apiKey: typeof data.apiKey === "string" ? data.apiKey : "",
-      provider: resolveProvider(data.provider),
-      mode: data.mode === "auto" ? "auto" : "manual",
-    };
-  };
+  const store = browser.storage.local;
+  const settings = () => readSettings(store);
+  const excluded = async (origin: string) =>
+    isExcluded(new URL(origin).hostname, await readExcludedHosts(store));
   const profile = async (context: PageContext): Promise<Profile | null> => {
     const key = profileKey(context.key);
     const parsed = profileSchema.safeParse((await browser.storage.local.get(key))[key]);
@@ -85,14 +94,14 @@ export default defineBackground(() => {
     const text = error ? "!" : busy ? "…" : paused ? "OFF" : saved ? "ON" : "";
     const color = error ? "#c2413a" : busy ? "#ad6a11" : paused ? "#71717a" : "#187b61";
     const title = error
-      ? "Unclutter: analysis failed — open popup"
+      ? "Zen: analysis failed — open popup"
       : busy
-        ? "Unclutter: analyzing"
+        ? "Zen: analyzing"
         : paused
-          ? "Unclutter: paused"
+          ? "Zen: paused"
           : saved
-            ? `Unclutter: saved template · ${state.hiddenCount} hidden`
-            : "Unclutter: not analyzed";
+            ? `Zen: saved template · ${state.hiddenCount} hidden`
+            : "Zen: not analyzed";
     await Promise.all([
       action.setBadgeText({ tabId, text }),
       action.setBadgeBackgroundColor({ tabId, color }),
@@ -119,26 +128,33 @@ export default defineBackground(() => {
   };
   const analyze = async (tabId: number, automatic = false) => {
     const snapshot = snapshotSchema.parse(await send<Snapshot>(tabId, "snapshot"));
+    if (await excluded(snapshot.context.origin)) {
+      if (automatic) return;
+      throw new Error("This site is excluded. Remove it from Excluded sites first.");
+    }
     const existing = jobs.get(snapshot.context.key);
     if (existing) {
       await existing;
       await refresh(tabId);
       return;
     }
-    const attemptKey = `auto:${snapshot.context.key}:a${ANALYSIS_VERSION}`;
+    const attempt = attemptKey(snapshot.context.key);
     const task = (async () => {
       const config = await settings();
       const before = await profile(snapshot.context);
-      const attempt = (await browser.storage.local.get(attemptKey))[attemptKey];
-      if (automatic && !shouldAutoAnalyze(config, before, !!attempt)) return;
+      if (
+        automatic &&
+        !shouldAutoAnalyze(config, before, await autoAttempted(store, snapshot.context.key))
+      )
+        return;
       if (!config.apiKey)
         throw new Error(`Add your ${providerKeyLabel(config.provider)} API key first.`);
-      if (!config.enabled) throw new Error("Enable Unclutter before analyzing.");
+      if (!config.enabled) throw new Error("Enable Zen before analyzing.");
       tabJobs.add(tabId);
       tabErrors.delete(tabId);
       // Persist BEFORE making a paid request: a failed call or worker restart
       // must not create a retry loop across navigation or another tab.
-      await browser.storage.local.set({ [attemptKey]: { startedAt: Date.now(), error: null } });
+      await store.set({ [attempt]: { startedAt: Date.now(), error: null } });
       await badge(tabId);
       const rules = await evaluate(snapshot, config.apiKey, config.provider);
       const latestConfig = await settings();
@@ -163,7 +179,7 @@ export default defineBackground(() => {
         rules,
       };
       await browser.storage.local.set({ [profileKey(next.key)]: next });
-      await browser.storage.local.remove(attemptKey);
+      await store.remove(attempt);
     })();
     jobs.set(snapshot.context.key, task);
     try {
@@ -171,7 +187,7 @@ export default defineBackground(() => {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Analysis failed.";
       tabErrors.set(tabId, message);
-      await browser.storage.local.set({ [attemptKey]: { startedAt: Date.now(), error: message } });
+      await store.set({ [attempt]: { startedAt: Date.now(), error: message } });
       throw error;
     } finally {
       jobs.delete(snapshot.context.key);
@@ -211,17 +227,18 @@ export default defineBackground(() => {
         }
         const config = await settings();
         const saved = await profile(message.context);
+        const skip = await excluded(message.context.origin);
         const state: PageState = {
           context: message.context,
           profile: saved,
-          enabled: config.enabled,
+          enabled: config.enabled && !skip,
           hiddenCount: message.hiddenCount,
         };
         await badge(sender.tab.id, state, tabErrors.has(sender.tab.id));
         return {
           profile: saved,
-          enabled: config.enabled,
-          autoEnabled: config.mode === "auto" && !!config.apiKey,
+          enabled: state.enabled,
+          autoEnabled: config.mode === "auto" && !!config.apiKey && !skip,
         };
       }
       if (sender.url !== browser.runtime.getURL("/popup.html"))
@@ -234,10 +251,16 @@ export default defineBackground(() => {
           hasKey: !!config.apiKey,
           provider: config.provider,
           mode: config.mode,
+          excludedHosts: await readExcludedHosts(store),
         };
       }
+      if (message.type === "excludedHosts") {
+        await writeExcludedHosts(store, message.hosts);
+        await broadcast();
+        return null;
+      }
       if (message.type === "saveKey") {
-        await browser.storage.local.set({ apiKey: message.key, provider: message.provider });
+        await saveKey(store, message.provider, message.key);
         return null;
       }
       if (message.type === "provider") {
@@ -245,7 +268,7 @@ export default defineBackground(() => {
         return null;
       }
       if (message.type === "removeKey") {
-        await browser.storage.local.remove("apiKey");
+        await removeKey(store);
         return null;
       }
       if (message.type === "global") {
@@ -260,14 +283,14 @@ export default defineBackground(() => {
       }
       if (message.type === "status") {
         const state = await send<PageState>(message.tabId, "state");
-        const attemptKey = `auto:${state.context.key}:a${ANALYSIS_VERSION}`;
-        const attempt = (await browser.storage.local.get(attemptKey))[attemptKey] as
-          | { error?: string | null }
-          | undefined;
+        const attempt = (await store.get(attemptKey(state.context.key)))[
+          attemptKey(state.context.key)
+        ] as { error?: string | null } | undefined;
         return {
           ...state,
           busy: tabJobs.has(message.tabId) || jobs.has(state.context.key),
           error: tabErrors.get(message.tabId) ?? attempt?.error ?? null,
+          excluded: await excluded(state.context.origin),
         };
       }
       if (message.type === "analyze") {
@@ -277,8 +300,10 @@ export default defineBackground(() => {
       const snapshot = snapshotSchema.parse(await send<Snapshot>(message.tabId, "snapshot"));
       const saved = await profile(snapshot.context);
       if (!saved) throw new Error("Analyze this page type first.");
-      if (message.type === "forget") await browser.storage.local.remove(profileKey(saved.key));
-      else {
+      if (message.type === "forget") {
+        await suppressAuto(store, saved.key);
+        await browser.storage.local.remove(profileKey(saved.key));
+      } else {
         if (message.type === "toggle") saved.enabled = message.enabled;
         if (message.type === "rule") {
           const rule = saved.rules.find((r) => r.selector === message.selector);

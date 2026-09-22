@@ -248,6 +248,7 @@ form > label {
   color: #586253;
 }
 select,
+textarea,
 input[type="password"] {
   width: 100%;
   border: 1px solid #d9e0d4;
@@ -380,4 +381,11 @@ footer > span:first-child {
   #notice {
     color: #90d5ae;
   }
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  margin-bottom: 8px;
 }

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ENDPOINT,
+  OPENROUTER_ENDPOINT,
+  OPENROUTER_MODEL,
   TYPESAFE_ENDPOINT,
   evaluate,
   evaluationCall,
@@ -160,4 +162,63 @@ test("smoke credentials support direct aliases and reject mixed provider familie
     /differ/,
   );
   assert.throws(() => smokeCredentials({}), /Set JEV_KEY/);
+});
+
+test("OpenRouter construction uses the decisions endpoint, Bearer and the pinned Jev model", () => {
+  const call = evaluationCall(snapshot, "synthetic-test-key", "openrouter");
+  assert.equal(call.url, OPENROUTER_ENDPOINT);
+  assert.deepEqual(call.init.headers, {
+    Authorization: "Bearer synthetic-test-key",
+    "Content-Type": "application/json",
+  });
+  assert.deepEqual(JSON.parse(String(call.init.body)), {
+    ...evaluationRequest(snapshot),
+    model: OPENROUTER_MODEL,
+  });
+  assert.ok(!String(call.init.body).includes("token=private"));
+  assert.equal(resolveProvider("openrouter"), "openrouter");
+});
+
+test("OpenRouter answers without confidence keep the element visible; others keep upstream behaviour", () => {
+  const noConfidence = {
+    answers: { e0: { type: "choice", choice: "ad", probabilities: { ad: 0.99 } } },
+  };
+  const bare = { answers: { e0: { type: "choice", choice: "ad" } } };
+  assert.deepEqual(rulesFromAnswers(noConfidence, snapshot.candidates, "openrouter"), []);
+  assert.deepEqual(rulesFromAnswers(bare, snapshot.candidates, "openrouter"), []);
+  assert.equal(rulesFromAnswers(result(), snapshot.candidates, "openrouter").length, 1);
+  assert.deepEqual(rulesFromAnswers(result(0.89), snapshot.candidates, "openrouter"), []);
+  assert.equal(rulesFromAnswers(bare, snapshot.candidates, "typesafe").length, 1);
+  assert.equal(rulesFromAnswers(bare, snapshot.candidates).length, 1);
+});
+
+test("OpenRouter HTTP errors give key and credit advice without echoing bodies", async (t) => {
+  let status = 401;
+  t.mock.method(globalThis, "fetch", async () => new Response("private body", { status }));
+  for (const [code, advice] of [
+    [401, "Check your OpenRouter API key."],
+    [403, "Check your OpenRouter API key."],
+    [402, "Check your OpenRouter credits."],
+    [429, "Rate limited. Try again later."],
+  ] as const) {
+    status = code;
+    await assert.rejects(evaluate(snapshot, "synthetic-test-key", "openrouter"), {
+      message: `Jev request failed: HTTP ${code}. ${advice}`,
+    });
+  }
+});
+
+test("smoke credentials accept OPENROUTER_API_KEY as its own family", () => {
+  assert.deepEqual(smokeCredentials({ OPENROUTER_API_KEY: " synthetic-test-key " }), {
+    provider: "openrouter",
+    key: "synthetic-test-key",
+  });
+  assert.throws(
+    () =>
+      smokeCredentials({
+        OPENROUTER_API_KEY: "synthetic-test-key",
+        JEV_KEY: "synthetic-test-key",
+      }),
+    /Set only one/,
+  );
 });

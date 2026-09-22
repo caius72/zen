@@ -23,7 +23,8 @@ let tabId: number | undefined;
 let hasKey = false;
 let working = false;
 let savedProvider: Provider = "vercel";
-let current: (PageState & { busy: boolean; error: string | null }) | null = null;
+let current: (PageState & { busy: boolean; error: string | null; excluded: boolean }) | null = null;
+let excludedHosts: string[] = [];
 let poll: ReturnType<typeof setTimeout> | undefined;
 
 async function request<T>(message: object): Promise<T> {
@@ -40,7 +41,15 @@ function error(error: unknown) {
 }
 function render() {
   const busy = working || current?.busy;
-  analyze.disabled = !current || !hasKey || !global.checked || !!busy;
+  const excluded = !!current?.excluded;
+  analyze.disabled = !current || !hasKey || !global.checked || !!busy || excluded;
+  const skip = get<HTMLButtonElement>("skip");
+  skip.hidden = !current;
+  skip.disabled = working;
+  skip.textContent = excluded ? "Include this site again" : "Skip this site";
+  get("excluded-count").textContent = excludedHosts.length ? `${excludedHosts.length} sites` : "";
+  if (document.activeElement?.id !== "excluded-hosts")
+    get<HTMLTextAreaElement>("excluded-hosts").value = excludedHosts.join("\n");
   analyze.textContent = busy ? "Analyzing…" : current?.profile ? "Re-analyze" : "Analyze page";
   toggle.hidden = !current?.profile;
   toggle.disabled = !!busy || !global.checked;
@@ -49,10 +58,10 @@ function render() {
   provider.disabled = working;
   get<HTMLInputElement>("api-key").placeholder = `Paste ${providerKeyLabel(selectedProvider)} key`;
   get("key-status").textContent = hasKey
-    ? `${selectedProvider === "typesafe" ? "TypeSafe" : "Vercel"} · Key saved`
+    ? `${providerLabel(selectedProvider)} · Key saved`
     : "API key required";
   get("disclosure").textContent =
-    `Analyze sends up to 60 element descriptions to ${providerLabel(selectedProvider)}. Main article text and form values are excluded; snippets may still contain personal data.`;
+    `Analyze sends up to 60 short, redacted snippets of candidate elements (named clutter blocks, asides, dialogs, iframes, fixed or sticky boxes) to ${providerLabel(selectedProvider)}. Snippets may include short editorial text or personal data. Form values, cookies and long article paragraphs are not sent.`;
   get("auto-disclosure").textContent =
     `On page visit automatically sends element snippets to ${providerLabel(selectedProvider)} for new templates. Snippets may contain personal data. API charges apply. Cached templates are reused.`;
   get("remove-key").hidden = !hasKey;
@@ -74,13 +83,15 @@ function render() {
   const paused = !global.checked || profile?.enabled === false;
   status.textContent = busy
     ? "Analyzing"
-    : paused
-      ? "Paused"
-      : profile
-        ? profile.analysisVersion < ANALYSIS_VERSION
-          ? "Update available"
-          : "Saved template"
-        : "Not analyzed";
+    : excluded
+      ? "Excluded"
+      : paused
+        ? "Paused"
+        : profile
+          ? profile.analysisVersion < ANALYSIS_VERSION
+            ? "Update available"
+            : "Saved template"
+          : "Not analyzed";
   status.className = `badge ${busy ? "busy" : profile && !paused ? "active" : ""}`;
   get("rules-section").hidden = !profile;
   get("rule-count").textContent =
@@ -123,10 +134,12 @@ async function load() {
     hasKey: boolean;
     mode: "manual" | "auto";
     provider: Provider;
+    excludedHosts: string[];
   }>({
     type: "settings",
   });
   hasKey = config.hasKey;
+  excludedHosts = config.excludedHosts;
   global.checked = config.enabled;
   mode.value = config.mode;
   savedProvider = resolveProvider(config.provider);
@@ -185,6 +198,19 @@ provider.addEventListener(
   () => void act({ type: "provider", provider: resolveProvider(provider.value) }),
 );
 get("forget").addEventListener("click", () => void act({ type: "forget", tabId }));
+get("skip").addEventListener("click", () => {
+  if (!current) return;
+  const host = new URL(current.context.origin).hostname;
+  const hosts = current.excluded
+    ? excludedHosts.filter((h) => host !== h && !host.endsWith(`.${h}`))
+    : [...excludedHosts, host];
+  void act({ type: "excludedHosts", hosts });
+});
+get("excluded-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const hosts = get<HTMLTextAreaElement>("excluded-hosts").value.split(/\n/);
+  void act({ type: "excludedHosts", hosts });
+});
 get("remove-key").addEventListener("click", () => void act({ type: "removeKey" }));
 get("key-form").addEventListener("submit", (event) => {
   event.preventDefault();

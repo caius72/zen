@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Unclutter</title>
+    <title>Zen</title>
   </head>
   <body>
     <header>
       <div class="brand">
         <img src="/icon/32.png" width="28" height="28" alt="" />
-        <h1>Unclutter</h1>
+        <h1>Zen</h1>
       </div>
       <label class="switch" title="Enable everywhere"
-        ><input id="global" type="checkbox" aria-label="Enable Unclutter everywhere" /><span></span
+        ><input id="global" type="checkbox" aria-label="Enable Zen everywhere" /><span></span
       ></label>
     </header>
     <main>
@@ -40,9 +40,12 @@
           <button id="analyze" class="primary" disabled>Analyze page</button
           ><button id="toggle" class="secondary" hidden>Pause</button>
         </div>
+        <button id="skip" class="text-button" hidden>Skip this site</button>
         <p id="disclosure" class="disclosure">
-          Analyze sends up to 60 element descriptions to Vercel AI Gateway. Main article text and
-          form values are excluded; snippets may still contain personal data.
+          Analyze sends up to 60 short, redacted snippets of candidate elements (named clutter
+          blocks, asides, dialogs, iframes, fixed or sticky boxes) to Vercel AI Gateway. Snippets
+          may include short editorial text or personal data. Form values, cookies and long article
+          paragraphs are not sent.
         </p>
       </section>
       <p id="error" role="alert" hidden></p>
@@ -52,6 +55,19 @@
         <div id="rules"></div>
         <button id="forget" class="text-button danger">Forget this page type</button>
       </details>
+      <details id="excluded-section">
+        <summary><span>Excluded sites</span><span id="excluded-count"></span></summary>
+        <form id="excluded-form">
+          <label for="excluded-hosts">Hostnames, one per line. Subdomains are included.</label>
+          <textarea
+            id="excluded-hosts"
+            rows="4"
+            spellcheck="false"
+            placeholder="localhost&#10;example.com"
+          ></textarea>
+          <button type="submit" class="secondary">Save</button>
+        </form>
+      </details>
       <details id="connection">
         <summary><span>Connection</span><span id="key-status">API key required</span></summary>
         <form id="key-form">
@@ -59,6 +75,7 @@
           ><select id="provider">
             <option value="vercel">Vercel AI Gateway</option>
             <option value="typesafe">TypeSafe AI</option>
+            <option value="openrouter">OpenRouter</option>
           </select>
           <label for="api-key">API key</label>
           <div class="key-row">
