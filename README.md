@@ -8,11 +8,30 @@ extension stores and reapplies local hiding rules by page template. The extensio
 unclutter's; this repository adds Safari packaging, an OpenRouter provider, per-provider API keys
 and small fixes. Upstream is kept as the `upstream` git remote so fixes can be merged.
 
-## Install (Safari, macOS)
+## Install (Safari, macOS 26 or later)
+
+```sh
+brew install --cask caius72/zen/zen-safari
+```
+
+The cask installs the notarized `Zen.app` from the matching
+[GitHub release](https://github.com/caius72/zen/releases) and opens it once so macOS registers
+the extension. Then:
+
+1. Safari > Settings > Extensions: enable Zen, then allow it on every website.
+2. Open the Zen popup, choose a provider under **Connection**, paste its key and save it.
+3. Choose **Manual** (default) and click **Analyze page**, or select **On page visit**.
+
+Upgrade with `brew upgrade --cask zen-safari`; remove with `brew uninstall --cask zen-safari`
+(`--zap` also deletes saved rules and keys).
+
+## Build from source (Safari, macOS)
 
 Requires Node.js 22.12 or newer and Xcode with the Safari web extension converter.
 
 ```sh
+git clone https://github.com/caius72/zen.git
+cd zen
 npm install
 ./build.sh
 ```
@@ -20,18 +39,16 @@ npm install
 `build.sh` runs the WXT build for `safari-mv3`, builds the Zen app from the Xcode project under
 `xcode/` (which references the WXT output directly), notarizes and staples it when a notarytool
 keychain profile named `zen-notary` exists, installs it to `~/Applications/Zen.app` and launches
-it so macOS registers the extension. Then:
+it so macOS registers the extension. Safari lists only notarized extensions unless Develop >
+Allow Unsigned Extensions is on (that toggle resets on every Safari launch). Create the profile
+once with `xcrun notarytool store-credentials zen-notary --key <AuthKey.p8> --key-id <ID>
+--issuer <UUID>` and rerun `./build.sh`. Keep only one copy of Zen.app installed (Homebrew's in
+`/Applications` or a source build in `~/Applications`), otherwise Safari lists the extension twice.
 
-1. `build.sh` signs with the Developer ID Application identity of team `ZEN_TEAM` (default
-   `8TJQFP35F5`); set `ZEN_TEAM` and `ZEN_SIGN_IDENTITY` for another account. Unsigned builds need
-   Develop > Allow Unsigned Extensions on every Safari launch.
-2. Safari lists only notarized extensions unless Develop > Allow Unsigned Extensions is on (that
-   toggle resets on every Safari launch). Create the profile once with
-   `xcrun notarytool store-credentials zen-notary --key <AuthKey.p8> --key-id <ID> --issuer <UUID>`
-   and rerun `./build.sh`.
-3. Safari > Settings > Extensions: enable Zen, then allow it on every website.
-4. Open the popup, choose a provider under **Connection**, paste its key and save it.
-5. Choose **Manual** (default) and click **Analyze page**, or select **On page visit**.
+`release.sh` publishes a version: it runs `build.sh`, requires notarization, uploads the stapled
+`Zen-<version>.zip` as GitHub release `v<version>` (version from `package.json`), and updates
+`Casks/zen-safari.rb` in the [tap](https://github.com/caius72/homebrew-zen) checkout at
+`~/repos/homebrew-zen` (override with `ZEN_TAP_DIR`).
 
 OpenRouter uses `POST https://openrouter.ai/api/alpha/decisions` with model `typesafe/jev-1.13`
 and Bearer authentication. Hiding rules from OpenRouter answers require a `confidence` value;
@@ -42,8 +59,8 @@ answers without one keep the element visible.
 Requires Node.js 22.12 or newer.
 
 ```sh
-git clone https://github.com/kitze/unclutter.git
-cd unclutter
+git clone https://github.com/caius72/zen.git
+cd zen
 npm ci
 npm run build
 ```
