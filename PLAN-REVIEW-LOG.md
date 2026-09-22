@@ -89,3 +89,7 @@
 - User request after acceptance: a setting to list domains (e.g. local machine) Zen must not analyze.
 - lib/settings.ts: normalizeHosts / isExcluded (host or any subdomain) / readExcludedHosts / writeExcludedHosts. background.ts: excluded origins get enabled=false and autoEnabled=false on sync (rules restored, no auto analysis), manual analyze refuses, status carries `excluded`, new `excludedHosts` popup message. Popup: "Skip this site" / "Include this site again" button, "Excluded sites" textarea, status "Excluded". README updated. Test in tests/zen.test.ts.
 - Proof: `npm run check` exit 0, 30 tests; `./build.sh` notarized (Accepted), installed to ~/Applications, registered once.
+
+## Distribution (2026-09-22, uninspected)
+
+- Fork caius72/zen created (parent kitze/unclutter), CI green. Tap caius72/homebrew-zen with cask `zen-safari` (token `zen` is Zen Browser in homebrew/cask). release.sh: build + notarize + GitHub release v<version> with stapled Zen-<version>.zip + cask version/sha update. v1.0.0 released; `brew install --cask caius72/zen/zen-safari` verified: notarized app in /Applications, extension registered once, brew style/audit clean. Dev copy in ~/Applications removed to avoid a duplicate Safari entry.

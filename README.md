@@ -15,10 +15,11 @@ brew install --cask caius72/zen/zen-safari
 ```
 
 The cask installs the notarized `Zen.app` from the matching
-[GitHub release](https://github.com/caius72/zen/releases) and opens it once so macOS registers
-the extension. Then:
+[GitHub release](https://github.com/caius72/zen/releases) into `/Applications`, which registers
+the extension with macOS. Then:
 
-1. Safari > Settings > Extensions: enable Zen, then allow it on every website.
+1. Safari > Settings > Extensions: enable Zen, then allow it on every website. If Zen is not
+   listed, open `Zen.app` once.
 2. Open the Zen popup, choose a provider under **Connection**, paste its key and save it.
 3. Choose **Manual** (default) and click **Analyze page**, or select **On page visit**.
 
