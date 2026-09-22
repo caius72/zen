@@ -230,6 +230,12 @@ get("key-form").addEventListener("submit", (event) => {
     }
   })();
 });
+// Safari cannot download from the popup, so backup lives on its own extension page.
+get("open-backup").addEventListener("click", () => {
+  void browser.tabs
+    .create({ url: browser.runtime.getURL("/backup.html") })
+    .then(() => window.close());
+});
 void (async () => {
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   tabId = tab?.id;

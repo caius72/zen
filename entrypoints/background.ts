@@ -6,11 +6,13 @@ import {
   attemptKey,
   autoAttempted,
   isExcluded,
+  parseBackup,
   readExcludedHosts,
   readSettings,
   removeKey,
   saveKey,
   suppressAuto,
+  toBackup,
   writeExcludedHosts,
 } from "../lib/settings";
 import {
@@ -30,6 +32,8 @@ import {
 
 const uiMessage = z.discriminatedUnion("type", [
   z.object({ type: z.literal("settings") }),
+  z.object({ type: z.literal("backup") }),
+  z.object({ type: z.literal("restore"), backup: z.unknown() }),
   z.object({
     type: z.literal("saveKey"),
     key: z.string().trim().min(1).max(1000),
@@ -211,7 +215,13 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((raw: unknown, sender, sendResponse) => {
     const handle = async (): Promise<unknown> => {
       if (sender.id !== browser.runtime.id) throw new Error("Untrusted sender.");
-      if (sender.tab) {
+      // Extension pages (popup, backup tab) are told apart from content scripts by URL: the backup
+      // page runs in a tab, so sender.tab alone does not mean "web page".
+      const origin = browser.runtime.getURL("/").toLowerCase();
+      const page = sender.url?.toLowerCase().startsWith(origin)
+        ? new URL(sender.url).pathname
+        : null;
+      if (sender.tab && page === null) {
         const message = pageMessage.parse(raw);
         if (
           sender.frameId !== 0 ||
@@ -241,9 +251,11 @@ export default defineBackground(() => {
           autoEnabled: config.mode === "auto" && !!config.apiKey && !skip,
         };
       }
-      if (sender.url !== browser.runtime.getURL("/popup.html"))
+      if (page !== "/popup.html" && page !== "/backup.html")
         throw new Error("Popup access required.");
       const message = uiMessage.parse(raw);
+      if (page === "/backup.html" && message.type !== "backup" && message.type !== "restore")
+        throw new Error("Popup access required.");
       if (message.type === "settings") {
         const config = await settings();
         return {
@@ -253,6 +265,16 @@ export default defineBackground(() => {
           mode: config.mode,
           excludedHosts: await readExcludedHosts(store),
         };
+      }
+      if (message.type === "backup") return toBackup(await store.get(null));
+      if (message.type === "restore") {
+        // Validate everything before touching storage; auto:* markers are kept.
+        const items = parseBackup(message.backup);
+        const old = Object.keys(await store.get(null)).filter((key) => !key.startsWith("auto:"));
+        await store.remove(old);
+        await store.set(items);
+        await broadcast();
+        return null;
       }
       if (message.type === "excludedHosts") {
         await writeExcludedHosts(store, message.hosts);

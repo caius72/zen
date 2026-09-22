@@ -26,6 +26,14 @@ the extension with macOS. Then:
 Upgrade with `brew upgrade --cask zen-safari`; remove with `brew uninstall --cask zen-safari`
 (`--zap` also deletes saved rules and keys).
 
+### Back up settings
+
+Popup > **Save or restore settings…** opens a page that saves settings, excluded sites, saved
+templates and API keys to a JSON file, and restores them from one. The file holds the API keys
+unencrypted. `scripts/zen-settings.sh backup [file]` / `restore <file>` does the same from the
+terminal (restore needs Safari quit). Safari can delete an extension's storage when the app is
+replaced while Safari is running, so save a backup and quit Safari before upgrading.
+
 ## Build from source (Safari, macOS)
 
 Requires Node.js 22.12 or newer and Xcode with the Safari web extension converter.
@@ -37,8 +45,9 @@ npm install
 ./build.sh
 ```
 
-`build.sh` runs the WXT build for `safari-mv3`, builds the Zen app from the Xcode project under
-`xcode/` (which references the WXT output directly), notarizes and staples it when a notarytool
+`build.sh` refuses to run while Safari is open (see above), then runs the WXT build for `safari-mv3`, builds the Zen app from the Xcode project under
+`xcode/` (which references the WXT output file by file: add new extension pages to its
+Resources, a test checks this), notarizes and staples it when a notarytool
 keychain profile named `zen-notary` exists, installs it to `~/Applications/Zen.app` and launches
 it so macOS registers the extension. Safari lists only notarized extensions unless Develop >
 Allow Unsigned Extensions is on (that toggle resets on every Safari launch). Create the profile

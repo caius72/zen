@@ -3,6 +3,12 @@
 # The Xcode project references .output/safari-mv3 directly, so no copy step is needed.
 set -eu
 cd "$(dirname "$0")"
+# Safari removes the extension AND DELETES ITS STORAGE when the app changes under a running Safari
+# (seen twice on 2026-09-22). Back up with scripts/zen-settings.sh backup, then quit Safari.
+if pgrep -xq Safari; then
+  echo "Quit Safari first: it deletes Zen's settings when the app is replaced while it runs." >&2
+  exit 1
+fi
 VERSION="$(node -p "require('./package.json').version")"
 npx wxt build -b safari --mv3
 xcodebuild -project xcode/Zen/Zen.xcodeproj -scheme Zen -configuration Release \
@@ -34,7 +40,10 @@ fi
 # Install to a stable location and (re)launch so macOS registers the extension with Safari.
 INSTALL="$HOME/Applications/Zen.app"
 pkill -x Zen 2>/dev/null || true
-mkdir -p "$HOME/Applications" && rm -rf "$INSTALL" && ditto "$APP" "$INSTALL"
+# Stage the copy, then swap by rename so the bundle is never half-copied.
+mkdir -p "$HOME/Applications" && rm -rf "$INSTALL.new" "$INSTALL.old" && ditto "$APP" "$INSTALL.new"
+[ -e "$INSTALL" ] && mv "$INSTALL" "$INSTALL.old"
+mv "$INSTALL.new" "$INSTALL" && rm -rf "$INSTALL.old"
 # Unregister the build-folder copy so Safari does not list the extension twice.
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 pluginkit -r "$APP/Contents/PlugIns/Zen Extension.appex" 2>/dev/null || true

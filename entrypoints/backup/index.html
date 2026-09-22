@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zen backup</title>
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <img src="/icon/32.png" width="28" height="28" alt="" />
+        <h1>Zen backup</h1>
+      </div>
+    </header>
+    <main>
+      <p class="disclosure">
+        Saves settings, excluded sites, saved templates and API keys to a JSON file. The file
+        contains your API keys unencrypted. Restore replaces all current settings.
+      </p>
+      <div class="actions">
+        <button id="save" type="button" class="secondary">Save settings</button
+        ><button id="restore" type="button" class="secondary">Restore settings</button>
+      </div>
+      <input id="file" type="file" accept=".json,application/json" hidden />
+      <p id="error" role="alert" hidden></p>
+      <p id="notice" role="status" hidden></p>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

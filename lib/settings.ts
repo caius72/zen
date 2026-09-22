@@ -1,5 +1,6 @@
-import { ANALYSIS_VERSION, type Settings } from "./model";
-import { resolveProvider, type Provider } from "./providers";
+import { z } from "zod";
+import { ANALYSIS_VERSION, profileSchema, type Settings } from "./model";
+import { providers, resolveProvider, type Provider } from "./providers";
 
 // Subset of browser.storage.local used by the background; injectable for tests.
 export type KeyStore = {
@@ -70,4 +71,43 @@ export async function readExcludedHosts(store: KeyStore): Promise<string[]> {
 
 export async function writeExcludedHosts(store: KeyStore, hosts: string[]): Promise<void> {
   await store.set({ excludedHosts: normalizeHosts(hosts) });
+}
+
+// Backup file: every setting, the API keys and saved templates. Transient auto-analysis markers
+// (auto:*) stay out so a restore neither blocks nor re-triggers paid analysis.
+// scripts/zen-settings.sh reads and writes the same format.
+const backupSchema = z.object({
+  format: z.literal("zen-settings"),
+  version: z.literal(1),
+  data: z.record(z.string(), z.unknown()),
+});
+
+export function toBackup(all: Record<string, unknown>) {
+  return {
+    format: "zen-settings",
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    data: Object.fromEntries(Object.entries(all).filter(([key]) => !key.startsWith("auto:"))),
+  };
+}
+
+// Validates every known key; unknown keys are dropped. Throws on anything malformed.
+export function parseBackup(raw: unknown): Record<string, unknown> {
+  const items: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(backupSchema.parse(raw).data)) {
+    if (key === "enabled") items[key] = z.boolean().parse(value);
+    else if (key === "mode") items[key] = z.enum(["manual", "auto"]).parse(value);
+    else if (key === "provider") items[key] = z.enum(providers).parse(value);
+    else if (key === "excludedHosts")
+      items[key] = normalizeHosts(z.array(z.string().max(253)).max(500).parse(value));
+    else if (key.startsWith("apiKey:")) {
+      z.enum(providers).parse(key.slice("apiKey:".length));
+      items[key] = z.string().trim().min(1).max(1000).parse(value);
+    } else if (key.startsWith("profile:")) {
+      const profile = profileSchema.parse(value);
+      if (key !== `profile:${profile.key}`) throw new Error(`Backup entry ${key} is inconsistent.`);
+      items[key] = profile;
+    }
+  }
+  return items;
 }

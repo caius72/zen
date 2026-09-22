@@ -19,6 +19,7 @@
 		2A0870BB3062DDBA0018A420 /* SafariWebExtensionHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A0870BA3062DDBA0018A420 /* SafariWebExtensionHandler.swift */; };
 		2A0870CE3062DDBA0018A420 /* background.js in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870C73062DDBA0018A420 /* background.js */; };
 		2A0870CF3062DDBA0018A420 /* popup.html in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870C83062DDBA0018A420 /* popup.html */; };
+		2A0870CF3062DDBA0018A421 /* backup.html in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870C83062DDBA0018A421 /* backup.html */; };
 		2A0870D03062DDBA0018A420 /* chunks in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870C93062DDBA0018A420 /* chunks */; };
 		2A0870D13062DDBA0018A420 /* content-scripts in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870CA3062DDBA0018A420 /* content-scripts */; };
 		2A0870D23062DDBA0018A420 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 2A0870CB3062DDBA0018A420 /* manifest.json */; };
@@ -66,6 +67,7 @@
 		2A0870BC3062DDBA0018A420 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		2A0870C73062DDBA0018A420 /* background.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = background.js; path = "../../../.output/safari-mv3/background.js"; sourceTree = "<group>"; };
 		2A0870C83062DDBA0018A420 /* popup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = popup.html; path = "../../../.output/safari-mv3/popup.html"; sourceTree = "<group>"; };
+		2A0870C83062DDBA0018A421 /* backup.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; name = backup.html; path = "../../../.output/safari-mv3/backup.html"; sourceTree = "<group>"; };
 		2A0870C93062DDBA0018A420 /* chunks */ = {isa = PBXFileReference; lastKnownFileType = folder; name = chunks; path = "../../../.output/safari-mv3/chunks"; sourceTree = "<group>"; };
 		2A0870CA3062DDBA0018A420 /* content-scripts */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "content-scripts"; path = "../../../.output/safari-mv3/content-scripts"; sourceTree = "<group>"; };
 		2A0870CB3062DDBA0018A420 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; name = manifest.json; path = "../../../.output/safari-mv3/manifest.json"; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 			children = (
 				2A0870C73062DDBA0018A420 /* background.js */,
 				2A0870C83062DDBA0018A420 /* popup.html */,
+				2A0870C83062DDBA0018A421 /* backup.html */,
 				2A0870C93062DDBA0018A420 /* chunks */,
 				2A0870CA3062DDBA0018A420 /* content-scripts */,
 				2A0870CB3062DDBA0018A420 /* manifest.json */,
@@ -263,6 +266,7 @@
 				2A0870CE3062DDBA0018A420 /* background.js in Resources */,
 				2A0870D23062DDBA0018A420 /* manifest.json in Resources */,
 				2A0870CF3062DDBA0018A420 /* popup.html in Resources */,
+				2A0870CF3062DDBA0018A421 /* backup.html in Resources */,
 				2A0870D13062DDBA0018A420 /* content-scripts in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
