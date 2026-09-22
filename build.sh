@@ -3,6 +3,7 @@
 # The Xcode project references .output/safari-mv3 directly, so no copy step is needed.
 set -eu
 cd "$(dirname "$0")"
+VERSION="$(node -p "require('./package.json').version")"
 npx wxt build -b safari --mv3
 xcodebuild -project xcode/Zen/Zen.xcodeproj -scheme Zen -configuration Release \
   SYMROOT="$PWD/xcode/build" \
@@ -12,6 +13,8 @@ xcodebuild -project xcode/Zen/Zen.xcodeproj -scheme Zen -configuration Release \
   OTHER_CODE_SIGN_FLAGS=--timestamp \
   CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
   CODE_SIGN_ENTITLEMENTS=Zen.entitlements \
+  MARKETING_VERSION="$VERSION" \
+  CURRENT_PROJECT_VERSION="${ZEN_BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}" \
   -quiet build
 APP="$PWD/xcode/build/Release/Zen.app"
 PROFILE="${ZEN_NOTARY_PROFILE:-zen-notary}"
